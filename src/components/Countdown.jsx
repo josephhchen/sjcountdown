@@ -2,19 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { FaSun, FaMoon } from 'react-icons/fa';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
+import { firestore } from '../../firebase'; // Import Firestore from the updated firebase.js
+import { doc, getDoc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore"; // Import required Firestore functions
 
 const Countdown = () => {
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const saved = localStorage.getItem('countdownDate');
-    return saved ? new Date(JSON.parse(saved)) : null;
-  });
+  const [selectedDate, setSelectedDate] = useState(null);
   const [timeLeft, setTimeLeft] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
+  // Effect to listen for changes in the selected date from Firestore
+  useEffect(() => {
+    const dateDocRef = doc(firestore, 'countdown', 'countdownDate');
+
+    const unsubscribe = onSnapshot(dateDocRef, (doc) => {
+      if (doc.exists()) {
+        const firestoreDate = doc.data().date;
+        setSelectedDate(new Date(firestoreDate)); // Convert stored string back to Date object
+      } else {
+        setSelectedDate(null);
+      }
+    });
+
+    return () => unsubscribe(); // Unsubscribe from Firestore listener on component unmount
+  }, []);
+
+  // Effect to handle countdown timer
   useEffect(() => {
     if (selectedDate) {
-      localStorage.setItem('countdownDate', JSON.stringify(selectedDate));
       const updateTimer = () => {
         const now = new Date();
         const difference = selectedDate.getTime() - now.getTime();
@@ -29,14 +44,14 @@ const Countdown = () => {
         } else {
           setTimeLeft("It's time!");
           setSelectedDate(null);
-          localStorage.removeItem('countdownDate');
+          deleteDoc(doc(firestore, 'countdown', 'countdownDate')); // Remove from Firestore when countdown is over
         }
       };
 
       updateTimer();
-      const timer = setInterval(updateTimer, 1000);
+      const timer = setInterval(updateTimer, 1000); // Update countdown every second
 
-      return () => clearInterval(timer);
+      return () => clearInterval(timer); // Clear interval on component unmount or when selectedDate changes
     }
   }, [selectedDate]);
 
@@ -52,8 +67,9 @@ const Countdown = () => {
     setIsModalOpen(false);
   };
 
-  const handleDateChange = (date) => {
+  const handleDateChange = async (date) => {
     setSelectedDate(date);
+    await setDoc(doc(firestore, 'countdown', 'countdownDate'), { date: date.toISOString() }); // Save the selected date to Firestore in ISO string format
     closeModal();
   };
 
@@ -82,7 +98,7 @@ const Countdown = () => {
           <button
             onClick={() => {
               setSelectedDate(null);
-              localStorage.removeItem('countdownDate');
+              deleteDoc(doc(firestore, 'countdown', 'countdownDate')); // Remove the date from Firestore
             }}
             className={`mt-8 px-6 py-3 ${isDarkMode ? 'bg-white text-[#181818]' : 'bg-[#181818] text-white'} hover:opacity-80 rounded-full transition-colors duration-300`}
           >
