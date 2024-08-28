@@ -55,8 +55,18 @@ const Countdown = () => {
     }
   }, [selectedDate]);
 
+  // Effect to initialize theme based on localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('isDarkMode');
+    if (savedTheme) {
+      setIsDarkMode(JSON.parse(savedTheme));
+    }
+  }, []);
+
   const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    localStorage.setItem('isDarkMode', JSON.stringify(newTheme)); // Save the theme preference in localStorage
   };
 
   const openModal = () => {
