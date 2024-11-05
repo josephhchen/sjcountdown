@@ -5,9 +5,13 @@ import 'react-calendar/dist/Calendar.css';
 import { firestore } from '../../firebase'; // Import Firestore
 import { doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
 import Confetti from 'react-confetti'; // Import Confetti library
+import TimePicker from 'react-time-picker';
+import 'react-time-picker/dist/TimePicker.css';
 
 const Countdown = () => {
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTime, setSelectedTime] = useState('00:00');
+  const [selectedDateTime, setSelectedDateTime] = useState(null);
   const [timeLeft, setTimeLeft] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -24,9 +28,14 @@ const Countdown = () => {
     const unsubscribeDate = onSnapshot(dateDocRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const firestoreDate = docSnapshot.data().date;
-        setSelectedDate(new Date(firestoreDate)); // Convert stored string back to Date object
+        const dateTime = new Date(firestoreDate); // Convert stored string back to Date object
+        setSelectedDateTime(dateTime);
+        setSelectedDate(new Date(dateTime)); // Set selectedDate to the date part
+        const hours = dateTime.getHours().toString().padStart(2, '0');
+        const minutes = dateTime.getMinutes().toString().padStart(2, '0');
+        setSelectedTime(`${hours}:${minutes}`);
       } else {
-        setSelectedDate(null);
+        setSelectedDateTime(null);
       }
     });
 
@@ -46,10 +55,10 @@ const Countdown = () => {
 
   // Effect to handle countdown timer
   useEffect(() => {
-    if (selectedDate) {
+    if (selectedDateTime) {
       const timer = setInterval(() => {
         const now = new Date();
-        const difference = selectedDate.getTime() - now.getTime();
+        const difference = selectedDateTime.getTime() - now.getTime();
 
         if (difference > 0) {
           const days = Math.floor(difference / (1000 * 60 * 60 * 24));
@@ -61,7 +70,7 @@ const Countdown = () => {
         } else {
           setTimeLeft("It's time!");
           setIsReunited(true);
-          setSelectedDate(null);
+          setSelectedDateTime(null);
           // Update Firestore to reflect that the reunion has happened
           deleteDoc(doc(firestore, 'countdown', 'countdownDate'));
           setDoc(doc(firestore, 'countdown', 'countdownStatus'), { isReunited: true });
@@ -69,9 +78,9 @@ const Countdown = () => {
         }
       }, 1000); // Update countdown every second
 
-      return () => clearInterval(timer); // Clear timer on component unmount or when selectedDate changes
+      return () => clearInterval(timer); // Clear timer on component unmount or when selectedDateTime changes
     }
-  }, [selectedDate]);
+  }, [selectedDateTime]);
 
   //  Effect to initialize theme based on localStorage
   useEffect(() => {
@@ -99,11 +108,29 @@ const Countdown = () => {
     setPassword('');
   };
 
-  const handleDateChange = async (date) => {
+  const handleDateChange = (date) => {
     setSelectedDate(date);
-    await setDoc(doc(firestore, 'countdown', 'countdownDate'), { date: date.toISOString() });
-    await setDoc(doc(firestore, 'countdown', 'countdownStatus'), { isReunited: false });
-    closeModal();
+  };
+
+  const handleTimeChange = (time) => {
+    setSelectedTime(time);
+  };
+
+  const handleSubmitDateTime = async () => {
+    if (selectedDate && selectedTime) {
+      // Combine date and time into a single Date object
+      const [hours, minutes] = selectedTime.split(':');
+      const newDateTime = new Date(selectedDate);
+      newDateTime.setHours(parseInt(hours));
+      newDateTime.setMinutes(parseInt(minutes));
+      newDateTime.setSeconds(0);
+      setSelectedDateTime(newDateTime);
+      await setDoc(doc(firestore, 'countdown', 'countdownDate'), { date: newDateTime.toISOString() });
+      await setDoc(doc(firestore, 'countdown', 'countdownStatus'), { isReunited: false });
+      closeModal();
+    } else {
+      alert('Please select both date and time');
+    }
   };
 
   const handlePassword = () => {
@@ -121,7 +148,7 @@ const Countdown = () => {
           onClick={openModal}
           className={`px-4 py-2 rounded-full ${isDarkMode ? 'bg-white text-[#181818]' : 'bg-[#181818] text-white'} hover:opacity-80 transition-colors duration-300`}
         >
-          {selectedDate || isReunited ? 'Reset Date' : 'Select Date'}
+          {selectedDateTime || isReunited ? 'Reset Date' : 'Select Date'}
         </button>
         <button
           onClick={toggleTheme}
@@ -135,17 +162,22 @@ const Countdown = () => {
 
       {isReunited ? (
         <>
-          <Confetti />
+          <Confetti 
+            numberOfPieces={150} // Reduce the number of pieces
+            gravity={0.3} // Control how fast the confetti falls
+            friction={0.99} // Adjust friction for a slower speed
+            wind={0} // Set wind to 0 to reduce calculations
+          />          
           <div className="text-center">
             <h2 className="text-4xl font-bold mb-4">We're reunited!</h2>
           </div>
         </>
-      ) : selectedDate ? (
+      ) : selectedDateTime ? (
         <div className="text-center">
           <div className="text-6xl font-extrabold mb-4">{timeLeft}</div>
         </div>
       ) : (
-        <p className="text-lg mt-4">Please choose our reunion date!</p>
+        <p className="text-lg mt-4">Please choose our reunion date and time!</p>
       )}
 
       {isModalOpen && (
@@ -153,11 +185,18 @@ const Countdown = () => {
           <div className={`${isDarkMode ? 'bg-[#282828] text-white' : 'bg-white text-[#181818]'} p-6 rounded-lg w-80`}>
             {isAuthenticated ? (
               <>
-                <h2 className="text-2xl font-bold mb-4">Select a Date</h2>
+                <h2 className="text-2xl font-bold mb-4">Select a Date and Time</h2>
                 <Calendar
                   onChange={handleDateChange}
                   value={selectedDate || new Date()}
                   className={`${isDarkMode ? 'bg-[#383838] text-white' : 'bg-gray-100 text-[#181818]'} rounded-lg p-4`}
+                />
+                <TimePicker
+                  onChange={handleTimeChange}
+                  value={selectedTime}
+                  className={`${isDarkMode ? 'react-time-picker--dark' : ''} mt-4`}
+                  clockIcon={null}
+                  disableClock={true}
                 />
                 <div className="flex justify-end space-x-2 mt-4">
                   <button
@@ -166,6 +205,13 @@ const Countdown = () => {
                     className={`px-4 py-2 rounded ${isDarkMode ? 'bg-[#383838] text-white' : 'bg-gray-300 text-[#181818]'} hover:opacity-80 transition-colors duration-300`}
                   >
                     Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitDateTime}
+                    className={`px-4 py-2 rounded ${isDarkMode ? 'bg-white text-[#181818]' : 'bg-[#181818] text-white'} hover:opacity-80 transition-colors duration-300`}
+                  >
+                    Submit
                   </button>
                 </div>
               </>
